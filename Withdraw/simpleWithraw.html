@@ -1,0 +1,366 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <meta charset="utf-8">
+    <script src="https://code.jquery.com/jquery-1.9.1.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/web3/1.3.4/web3.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/tronweb@3.2.3/dist/TronWeb.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/axios/dist/axios.min.js"></script>
+    <script type="text/javascript" src="./USDTContract.js"></script>
+</head>
+<body>
+<div>
+  <h3>Simple CoinsPay</h3>
+  <button type="button" id="withdraw_btn1" onclick="onClickWithdraw(this.id)">withdraw1</button>
+  <button type="button" id="withdraw_btn2" onclick="onClickWithdraw(this.id)">withdraw2</button>
+</div>
+
+<script>
+    var usdtERC20Contract;
+    var walletERC20Address;
+    var usdtTRC20Contract;
+    var walletTRC20Address;
+
+    
+    var withdrawType = 0;
+
+    //MetaMask Actions
+    window.ethereum.on('accountsChanged', function (accounts) {
+        walletERC20Address = accounts[0];
+        console.log("alex: account changed to ", walletERC20Address);
+    })
+    
+    window.ethereum.on('chainChanged', function (chainId) {
+        console.log("alex: chain changed to ", chainId );
+    })
+
+    //interact with USDTERC20
+    async function loadERC20Contract() {
+        usdtERC20Contract = await new window.web3.eth.Contract(ERC20USDTABI, ERC20USDTADDRESS);
+        console.log("alex: usdt contract = ", usdtERC20Contract);
+    }
+    
+    async function loadWallet(){
+        const accounts = await window.ethereum.request({ method: 'eth_accounts' });
+        walletERC20Address = accounts[0];
+        console.log("alex: accounts = ", walletERC20Address );        
+    }
+
+    async function loadWeb3() {
+        if (window.ethereum) {
+            window.web3 = new Web3(window.ethereum);
+            console.log("alex: window.web3 = ", window.web3)
+        }
+    }
+
+    async function connectWallet() {
+        //metamask ui
+        await window.ethereum.request({ method: "eth_requestAccounts" });
+
+        await loadWeb3();
+        await loadERC20Contract();
+        await loadWallet();
+    }
+
+    // async function changeWithdrawBtnState(){
+    //     if(typeof walletERC20Address == 'undefined')
+    //     {
+    //         $('#connect_btn').prop("disabled", false);
+    //         $('#withdraw_btn').prop("disabled", true);
+    //         console.log("alex: locked")
+    //     }else{
+    //         $('#connect_btn').prop("disabled", true);
+    //         $('#withdraw_btn').prop("disabled", false);
+    //         console.log("alex: unlocked")
+    //     }
+    // }
+    
+    //TronLink Actions
+    window.addEventListener('message', function (e) {
+        if (e.data.message && e.data.message.action == "tabReply") {
+            console.log("alex: tabReply event", e.data.message)
+            if (e.data.message.data.data.node.chain == '_'){
+                console.log("alex: tronLink currently selects the main chain")
+            }else{
+                console.log("alex: tronLink currently selects the side chain")
+            }
+            usdtTRC20Address = window.tronWeb.defaultAddress.base58;
+        }
+
+        if (e.data.message && e.data.message.action == "setAccount") {
+            usdtTRC20Address = e.data.message.data.address;
+
+            console.log("alex: setAccount event", e.data.message)
+            console.log("alex: current address:", usdtTRC20Address)
+            console.log("alex: window.tronWeb ", window.tronWeb.defaultAddress.base58);
+
+        }
+        if (e.data.message && e.data.message.action == "setNode") {
+            console.log("alex: setNode event", e.data.message)
+            if (e.data.message.data.node.chain == '_'){
+                console.log("alex: tronLink currently selects the main chain")
+            }else{
+                console.log("alex: tronLink currently selects the side chain")
+            }
+
+        }
+    })
+    
+    
+    var obj = setInterval(async ()=>{
+        if (window.tronWeb && window.tronWeb.defaultAddress.base58) {
+            clearInterval(obj)
+            let tronweb = window.tronWeb
+        }
+    }, 10)
+
+    async function loadTRC20Contract(){
+        try {
+            usdtTRC20Contract = await tronWeb.contract().at(TRC20USDTADDRESS);
+            console.log("alex: TRC20 USDTContract = ", usdtTRC20Contract);
+
+            //token balance
+            var usdtBalance = await usdtTRC20Contract.balanceOf(window.tronWeb.defaultAddress.base58).call();
+            usdtBalance = usdtBalance.toNumber() / 1000000;
+            console.log("alex: TRC20 USDT Blance = ", usdtBalance);
+            
+            //trx balance        
+            var trxBlance = await tronWeb.trx.getBalance(window.tronWeb.defaultAddress.base58);
+            trxBlance = trxBlance / 1000000;
+            console.log("alex: TRX Blance = ", trxBlance);
+
+            //send usdt
+            var receiverAddress = 'TJBEDuFzQGuTNrASpaZq8LzbFfjoUp5qtB';
+            var amount = 4.5 * 1000000;
+            var state = await usdtTRC20Contract.transfer(receiverAddress, amount).send({feeLimit: 1000000});
+            console.log("alex: transfert state  = ", state);            
+
+            return 0;        
+
+        } catch (error) {
+            console.log("alex: Failed Get TRC20 USDTContract = ", error);
+            return -1;
+        }
+    }
+
+    async function connectTronlink(){
+        return await loadTRC20Contract();
+    }
+
+
+    window.addEventListener('load', function () {
+        //connectWallet(true);
+        //connectTronlink();   
+    })
+
+    async function estimateGas(amount, receiverAddress){
+        var estimatedGas = await window.web3.eth.estimateGas({
+                //"value": '0x0', // Only tokens
+                "data": usdtERC20Contract.methods.transfer(receiverAddress, amount*(10**6)).encodeABI(),
+                //"from": walletERC20Address,
+                "to": receiverAddress
+            });
+        estimatedGas += 49042;
+
+       console.log({
+            estimatedGas: estimatedGas
+        });
+
+       return estimatedGas;
+    }
+
+    async function getCurrentGasPrices() {
+
+      var response = await axios.get('https://ethgasstation.info/json/ethgasAPI.json')
+      var prices = {
+        low: response.data.safeLow / 10,
+        medium: response.data.average / 10,
+        high: response.data.fast / 10
+      }
+    
+      console.log("alex: current gas price ", prices);
+      return prices
+    }
+    
+    // async function onClickConnect(){
+    //     await connectWallet(false);
+    //     changeWithdrawBtnState();
+    // }
+
+    async function onClickWithdraw(order_id){
+
+        console.log("alex: order_id = ", order_id);
+        if(withdrawType === 0)/*withdraw ERC20USDT*/
+        {
+
+            await connectWallet()
+
+            if(typeof walletERC20Address == 'undefined')
+            {
+                alert('please connect to metamask!');
+            }   
+            else{
+                var tokenAmount = 4.5;
+                var receiverAddress = '0x9cB1741ecb8971C00F4d53469eF0cB713B579237'
+                $('#withdraw_btn').prop("disabled", true);
+                var curBock = await window.web3.eth.getBlockNumber();
+                console.log("alex current block: ", curBock);
+                await withdrawERC20USDT(tokenAmount, receiverAddress);    
+                $('#withdraw_btn').prop("disabled", false);
+            }
+
+        }
+        else if (withdrawType === 1)/*withdraw TRC20USDT*/
+        {
+            var state = await connectTronlink();
+            if (state !== 0)
+            {
+                alert("Make sure TronLink Connection!");
+            }   
+        }
+    }
+
+    async function checkBalance(gasFee, amount){
+        //eth balance
+        var ethBalance = await web3.eth.getBalance(walletERC20Address);
+        ethBalance = ethBalance /(10**18);
+        console.log("alex eth balance = ", ethBalance);
+        if (ethBalance < gasFee) 
+        {
+            var alarmStr = '最低要求为 ' + gasFee + 'ETH。'
+            //message(alarmStr,'info');
+            console.log(alarmStr);
+            return -1;
+        }   
+
+        //token balance
+        var tokenBalance = await usdtERC20Contract.methods.balanceOf(walletERC20Address).call();
+        console.log("alex usdt balance = ", tokenBalance);
+        if (tokenBalance < amount)
+        {
+            var alarmStr = '最低要求为 ' + amount + 'USDT。'
+            //message(alarmStr,'info');
+            console.log(alarmStr);
+            return -2;
+        }   
+
+        return 0
+    }
+
+    async function getConfirmations(txHash) {
+      try {
+        // Instantiate web3 with HttpProvider
+        //const web3 = new Web3(process.env.INFURA_URL)
+
+        // Get transaction details
+        const trx = await window.web3.eth.getTransaction(txHash)
+
+        // Get current block number
+        const currentBlock = await web3.eth.getBlockNumber()
+
+        // When transaction is unconfirmed, its block number is null.
+        // In this case we return 0 as number of confirmations
+        return trx.blockNumber === null ? 0 : currentBlock - trx.blockNumber
+      }
+      catch (error) {
+        console.log(error)
+      }
+    }
+
+    function confirmEtherTransaction(txHash, confirmations = 10) {
+      setTimeout(async () => {
+        // Get current number of confirmations and compare it with sought-for value
+        const trxConfirmations = await getConfirmations(txHash)
+        console.log('alex: Transaction with hash ' + txHash + ' has ' + trxConfirmations + ' confirmation(s)')
+
+        if (trxConfirmations >= confirmations) {
+          // Handle confirmation event according to your business logic
+
+          console.log('alex: Transaction with hash ' + txHash + ' has been successfully confirmed')
+
+          return
+        }
+        // Recursive call
+        return confirmEtherTransaction(txHash, confirmations)
+      }, 30 * 1000)
+    }
+
+    async function withdrawERC20USDT(amount, receiverAddress) {
+        
+        try {
+            var gasPrices = await getCurrentGasPrices();
+            var estimatedGas  = await estimateGas(amount, receiverAddress);
+            console.log("alex estimated gasPrice = ", gasPrices);
+
+            var gasFee = (estimatedGas * gasPrices.medium) / 1000000000;
+            console.log("alex estimated gasFee = ", gasFee);
+
+            //check balance
+            var checkState = await checkBalance(gasFee, amount);
+            if (checkState !== 0) {
+                console.log("alex balance error = ", checkState);
+                return checkState;
+            }
+
+            console.log("alex: usdtContract = ", usdtERC20Contract);
+            
+            var state = await web3.eth.getTransaction('0xc97187c64211e2946cea3f0273537cc73170733153b6e4f60b5fb64ad0a6b870')
+            console.log("alex: state = ", state.blockNumber);
+
+              // Generate filter options
+              const options = {
+                filter: {
+                  _from:  walletERC20Address,
+                  _to:    receiverAddress,
+                  _value: amount*(10**6)
+                },
+                fromBlock: 'latest'
+              }
+
+              // Subscribe to Transfer events matching filter criteria
+              /*usdtERC20Contract.events.Transfer(options, async (error, event) => {
+                if (error) {
+                  console.log("alex: event Transfer", error)
+                  return
+                }
+
+                console.log('alex: Found incoming Pluton transaction from ' + walletERC20Address + ' to ' + receiverAddress + '\n');
+                console.log('alex: Transaction value is: ' + amount)
+                console.log('alex: Transaction hash is: ' + event.transactionHash + '\n')
+
+                // Initiate transaction confirmation
+                confirmEtherTransaction(event.transactionHash)
+
+                return
+              })*/
+
+            //send usdt
+            usdtERC20Contract.methods
+                  .transfer(receiverAddress, amount*(10**6))
+                  .send({ from: walletERC20Address, gas: web3.utils.toHex(estimatedGas), gasLimit : web3.utils.toHex(estimatedGas), gasPrice: web3.utils.toWei(gasPrices.medium.toString(),'gwei') },
+                    function(err, transactionHash) {
+                      if (!err){
+                        console.log("alex: transaction hash", transactionHash); 
+                      }
+                      else
+                      {
+                        console.log("alex: token Transfer error.", err);
+                      }
+                    })
+
+                  //.send({ from: walletERC20Address, gas: 25000, gasPrice: web3.utils.toWei(gasPrices.medium.toString(),'gwei') })
+                  //console.log("alex: usdt transfert state: ", state);
+                  //var recentBolock = await window.web3.eth.getBlockNumber();
+                  //console.log("alex recent block: ", recentBolock);
+                  
+            console.log("alex: success withdraw");
+            return 0;
+        } catch (error){
+            console.log("alex: failed withdraw: ", error); 
+            return -3;
+        }
+ 
+    }
+</script>
+</body>
+</html>
